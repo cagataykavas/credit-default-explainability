@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from .data import FEATURES
@@ -19,6 +20,10 @@ class FeatureContribution:
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def _python_scalar(value: Any) -> Any:
+    return value.item() if isinstance(value, np.generic) else value
 
 
 def local_perturbation_attribution(
@@ -42,8 +47,8 @@ def local_perturbation_attribution(
         contributions.append(
             FeatureContribution(
                 feature=feature,
-                observed=row.iloc[0][feature],
-                baseline=baseline[feature],
+                observed=_python_scalar(row.iloc[0][feature]),
+                baseline=_python_scalar(baseline[feature]),
                 probability_delta=float(delta),
                 direction="increases_risk" if delta > 0 else "decreases_risk",
             )

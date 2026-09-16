@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import joblib
-import numpy as np
 import pandas as pd
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.compose import ColumnTransformer
@@ -48,7 +47,7 @@ class CreditRiskModel:
     category_modes: dict[str, str]
 
     @classmethod
-    def fit(cls, frame: pd.DataFrame) -> tuple["CreditRiskModel", dict[str, float]]:
+    def fit(cls, frame: pd.DataFrame) -> tuple[CreditRiskModel, dict[str, float]]:
         split = int(len(frame) * 0.8)
         train = frame.iloc[:split].copy()
         test = frame.iloc[split:].copy()
@@ -72,7 +71,7 @@ class CreditRiskModel:
         joblib.dump(self, path)
 
     @classmethod
-    def load(cls, path: str) -> "CreditRiskModel":
+    def load(cls, path: str) -> CreditRiskModel:
         obj = joblib.load(path)
         if not isinstance(obj, cls):
             raise TypeError("artifact is not a CreditRiskModel")

@@ -13,7 +13,7 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt
       - run: ruff check .
-      - run: pytest -q
+      - run: python -m pytest -q
       - run: python -m creditxai.cli --rows 2200
   container:
     runs-on: ubuntu-latest
