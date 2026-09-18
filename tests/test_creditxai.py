@@ -7,6 +7,7 @@ from creditxai.counterfactual import find_actionable_counterfactual
 from creditxai.data import FEATURES, synthetic_credit_data
 from creditxai.explain import explain_decision
 from creditxai.model import CreditRiskModel
+from creditxai.stability import audit_local_explanation_stability
 
 
 def test_model_probability_and_explanation():
@@ -37,3 +38,51 @@ def test_demo_api_returns_explanation_and_counterfactual():
     payload = response.json()
     assert "explanation" in payload
     assert "counterfactual" in payload
+
+
+def test_local_explanation_stability_audit_is_deterministic():
+    frame = synthetic_credit_data(rows=2200, seed=17)
+    model, _ = CreditRiskModel.fit(frame)
+    row = frame.drop(columns="default").iloc[[250]][FEATURES]
+
+    first = audit_local_explanation_stability(
+        model,
+        row,
+        samples=20,
+        relative_noise=0.005,
+        top_k=4,
+        seed=9,
+    )
+    second = audit_local_explanation_stability(
+        model,
+        row,
+        samples=20,
+        relative_noise=0.005,
+        top_k=4,
+        seed=9,
+    )
+
+    assert first == second
+    assert 0.0 <= first.minimum_top_k_overlap <= first.mean_top_k_overlap <= 1.0
+    assert 0.0 <= first.minimum_direction_agreement <= first.mean_direction_agreement <= 1.0
+    assert first.probability_standard_deviation >= 0.0
+    assert first.maximum_probability_drift >= 0.0
+
+
+def test_stability_audit_rejects_invalid_sampling_policy():
+    frame = synthetic_credit_data(rows=2200, seed=19)
+    model, _ = CreditRiskModel.fit(frame)
+    row = frame.drop(columns="default").iloc[[10]][FEATURES]
+
+    for kwargs in (
+        {"samples": 0},
+        {"relative_noise": 0.0},
+        {"top_k": 0},
+        {"top_k": len(FEATURES) + 1},
+    ):
+        try:
+            audit_local_explanation_stability(model, row, **kwargs)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"expected ValueError for {kwargs}")
