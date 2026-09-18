@@ -14,6 +14,7 @@ flowchart LR
     M --> G[Permutation importance]
     S --> L[Local baseline perturbations]
     L --> R[Reason codes]
+    L --> STAB[Neighborhood stability audit]
     S --> C[Constrained counterfactual search]
     G --> REP[Explanation object / HTML report]
     R --> REP
@@ -28,10 +29,27 @@ The repository separates several questions that are often incorrectly collapsed 
 - **Is the probability calibrated?** The classifier is wrapped with sigmoid calibration and reports Brier score as well as ROC-AUC / average precision.
 - **Which features matter globally?** Held-out permutation importance measures the drop in ROC-AUC when one raw feature is shuffled.
 - **Why did this row receive this score?** A model-agnostic local perturbation replaces each feature with a training baseline and measures the probability change.
-- **What small actionable changes move the model score?** A constrained greedy counterfactual search considers only a small allowlist of synthetic, potentially actionable variables.
+- **Are local explanations stable nearby?** Seeded valid numeric perturbations measure top-feature overlap, attribution-direction agreement and probability drift.\n- **What small actionable changes move the model score?** A constrained greedy counterfactual search considers only a small allowlist of synthetic, potentially actionable variables.
 - **What should a reviewer see?** The API returns structured reason codes, local sensitivities, probability, threshold and explicit caveats.
 
 The local perturbation values are deliberately labelled as *model sensitivity*, not causal explanations or Shapley values.
+
+## Explanation stability audit
+
+A local attribution can look plausible while changing sharply for nearly identical inputs. The CLI now runs a deterministic neighborhood audit around the reported example:
+
+- small Gaussian perturbations are applied only to numeric features;
+- ratios remain within `[0, 1]`, counts/ages stay non-negative and categorical fields remain unchanged;
+- top-k feature overlap and attribution-direction agreement are measured for every neighbor;
+- probability standard deviation and maximum drift separate explanation instability from score instability;
+- seed, sample count, noise level and top-k are stored with the metrics.
+
+```bash
+python -m creditxai.cli --rows 6000 --seed 42 --stability-samples 100
+jq '.explanation_stability' artifacts/analysis.json
+```
+
+This is a local sensitivity diagnostic, not evidence of causal correctness or global robustness. Noise policy and acceptance thresholds must be reviewed for the deployment domain.
 
 ## Synthetic features
 
@@ -108,7 +126,7 @@ ruff check .
 pytest -q
 ```
 
-CI trains the deterministic synthetic model, exercises the explanation and counterfactual paths, generates artifacts and builds the container.
+CI trains the deterministic synthetic model, exercises explanation stability and counterfactual paths, generates artifacts and builds the container.
 
 ## Governance / limitations
 
@@ -116,4 +134,4 @@ A high model score is not a legal lending decision. Permutation importance can b
 
 ## Portfolio signal
 
-**Python · scikit-learn · probability calibration · XAI · permutation importance · counterfactual explanations · model governance · FastAPI · Docker · CI/CD**
+**Python · scikit-learn · probability calibration · XAI stability · XAI · permutation importance · counterfactual explanations · model governance · FastAPI · Docker · CI/CD**
