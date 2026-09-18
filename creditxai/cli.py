@@ -10,6 +10,7 @@ from .explain import explain_decision
 from .global_importance import permutation_feature_importance
 from .model import CreditRiskModel
 from .report import render_report
+from .stability import audit_local_explanation_stability
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -17,6 +18,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rows", type=int, default=6000)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", type=Path, default=Path("artifacts"))
+    parser.add_argument("--stability-samples", type=int, default=30)
     args = parser.parse_args(argv)
 
     frame = synthetic_credit_data(args.rows, args.seed)
@@ -26,12 +28,19 @@ def main(argv: list[str] | None = None) -> int:
     example = test.sort_values("debt_ratio", ascending=False).drop(columns="default").iloc[[0]][FEATURES]
     explanation = explain_decision(model, example)
     counterfactual = find_actionable_counterfactual(model, example).as_dict()
+    stability = audit_local_explanation_stability(
+        model,
+        example,
+        samples=args.stability_samples,
+        seed=args.seed,
+    ).as_dict()
     result = {
         "metrics": metrics,
         "global_importance": importance,
         "example": {key: (value.item() if hasattr(value, "item") else value) for key, value in example.iloc[0].to_dict().items()},
         "explanation": explanation,
         "counterfactual": counterfactual,
+        "explanation_stability": stability,
     }
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "analysis.json").write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
