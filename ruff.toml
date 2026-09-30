@@ -1,0 +1,4 @@
+src = ["."]
+
+[lint.isort]
+known-first-party = ["app", "creditxai"]
