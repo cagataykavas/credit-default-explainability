@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from .data import FEATURES
-from .model import CreditRiskModel
+from .model import NUMERIC, CreditRiskModel
 
 
 @dataclass(frozen=True)
@@ -41,6 +41,10 @@ def local_perturbation_attribution(
     contributions: list[FeatureContribution] = []
     for feature in FEATURES:
         perturbed = row.copy()
+        if feature in NUMERIC:
+            # A fitted median can be fractional even when the observed column is
+            # integer-valued. Pandas 3 rejects that previously implicit upcast.
+            perturbed[feature] = perturbed[feature].astype(float)
         perturbed.loc[perturbed.index[0], feature] = baseline[feature]
         probability_without_feature_value = model.predict_probability(perturbed)
         delta = original_probability - probability_without_feature_value
@@ -71,7 +75,9 @@ def reason_codes(contributions: list[FeatureContribution], top_k: int = 4) -> li
     return [labels.get(item.feature, item.feature) for item in positive[:top_k]]
 
 
-def explain_decision(model: CreditRiskModel, row: pd.DataFrame, threshold: float = 0.35) -> dict[str, Any]:
+def explain_decision(
+    model: CreditRiskModel, row: pd.DataFrame, threshold: float = 0.35
+) -> dict[str, Any]:
     probability = model.predict_probability(row)
     contributions = local_perturbation_attribution(model, row)
     return {
