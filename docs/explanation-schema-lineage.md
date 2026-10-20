@@ -67,13 +67,61 @@ python -m creditxai.explanation_contract bound-explanation.json \
 Exit codes are `0` for accepted evidence, `2` for malformed input, and `3` for a well-formed policy
 rejection. Report writes are atomic.
 
+## Signed promotion admission
+
+A digest detects accidental or adversarial content changes only when the expected digest already
+comes from a trusted channel. For production admission, a promotion process can attach an
+HMAC-SHA256 receipt that authorizes one exact model, fitted pipeline, and feature contract for a
+bounded audience and validity window:
+
+```python
+from datetime import UTC, datetime, timedelta
+import os
+
+from creditxai.explanation_contract import sign_promotion_receipt
+
+issued_at = datetime.now(UTC)
+receipt = sign_promotion_receipt(
+    contract,
+    key_id="credit-prod-2026-10",
+    secret=os.environ["CREDIT_XAI_PROMOTION_KEY"].encode(),
+    audience="credit-xai-production",
+    issued_at=issued_at,
+    expires_at=issued_at + timedelta(days=7),
+)
+artifact = bind_explanation(
+    contract,
+    contributions,
+    generated_at=datetime.now(UTC),
+    promotion=receipt,
+)
+```
+
+The admission CLI reads trusted keys from environment variables, never from command-line values:
+
+```bash
+python -m creditxai.explanation_contract bound-explanation.json \
+  --now 2026-10-01T09:30:00Z \
+  --require-signed-promotion \
+  --promotion-audience credit-xai-production \
+  --trusted-promotion-key-env credit-prod-2026-10=CREDIT_XAI_PROMOTION_KEY \
+  --output lineage-report.json
+```
+
+Multiple `--trusted-promotion-key-env` options support bounded key rotation. Admission rejects an
+unknown key ID, a bad constant-time signature comparison, a wrong audience, an expired or
+not-yet-valid receipt, an excessive validity window, a digest mismatch, and explanations generated
+before promotion. Reports retain only a SHA-256 reference to the key ID; neither the key ID nor key
+material is emitted.
+
 ## Trust boundary and limitations
 
-The caller must supply a trusted SHA-256 identity for the promoted model artifact. A hash identifies
-bytes but does not authenticate the producer; production systems should sign the model, contract,
-and audit report. The gate verifies schema lineage, not attribution faithfulness, fairness, causal
-meaning, calibration, or legal suitability of a reason code. Units and semantic identifiers are
-declared policy and require governance review when a feature definition changes.
+HMAC authenticates the receipt only to systems sharing the secret; it does not provide public
+verifiability, hardware-backed key custody, signer identity, rollback protection, or non-repudiation.
+Production keys should live in a KMS/HSM-backed secret channel and rotate by key ID. The gate verifies
+schema lineage, not attribution faithfulness, fairness, causal meaning, calibration, or legal
+suitability of a reason code. Units and semantic identifiers are declared policy and require
+governance review when a feature definition changes.
 
 The included builder supports this repository's fitted sklearn pipeline. Other frameworks need an
 adapter that extracts equivalent ordered transform state without serializing raw training data.

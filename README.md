@@ -110,6 +110,11 @@ pytest -q
 
 CI trains the deterministic synthetic model, exercises the explanation and counterfactual paths, generates artifacts and builds the container.
 
+The feature-lineage audit can additionally require a time-bounded HMAC-SHA256 promotion receipt,
+loaded from environment-backed key material, before an explanation is admitted. See
+[`docs/explanation-schema-lineage.md`](docs/explanation-schema-lineage.md) for the key-rotation and
+trust-boundary contract.
+
 ## Governance / limitations
 
 A high model score is not a legal lending decision. Permutation importance can be distorted by correlated variables; one-feature perturbations can create unrealistic combinations; and counterfactual feasibility is domain-specific. A real deployment would require fairness testing, policy controls, data lineage, monitoring, protected-class review, legal validation and human oversight.
