@@ -12,7 +12,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements.txt
-      - run: ruff check .
+      - run: ruff check --config "lint.isort.known-first-party = ['app', 'creditxai']" .
       - run: python -m pytest -q
       - run: python -m creditxai.cli --rows 2200
   container:
