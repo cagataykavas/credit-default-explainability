@@ -16,6 +16,7 @@ from creditxai.faithfulness import (
     FaithfulnessAuditError,
     FaithfulnessPolicy,
     audit_sequential_ablation,
+    cohort_content_sha256,
     main,
     write_report_atomic,
 )
@@ -89,11 +90,12 @@ def _audit(
     policy: FaithfulnessPolicy | None = None,
     attribution_fn=local_perturbation_attribution,
 ):
+    active_cohort = _rows() if cohort is None else cohort
     return audit_sequential_ablation(
         model or AdditiveModel(),
-        _rows() if cohort is None else cohort,
+        active_cohort,
         model_sha256=MODEL_DIGEST,
-        cohort_sha256=COHORT_DIGEST,
+        cohort_sha256=cohort_content_sha256(active_cohort),
         explainer_sha256=EXPLAINER_DIGEST,
         policy=policy,
         attribution_fn=attribution_fn,
@@ -119,6 +121,54 @@ def test_is_deterministic_and_input_order_independent() -> None:
 
     assert first.evidence_sha256 == second.evidence_sha256
     assert first.metrics == second.metrics
+
+
+def test_cohort_identity_is_order_independent_and_content_sensitive() -> None:
+    cohort = _rows(3)
+    reordered = cohort.iloc[::-1]
+    changed_value = cohort.copy(deep=True)
+    changed_value.loc["customer-0", "income"] += 1.0
+    changed_identity = cohort.copy(deep=True)
+    changed_identity.index = ["replacement", "customer-1", "customer-2"]
+
+    assert cohort_content_sha256(cohort) == cohort_content_sha256(reordered)
+    assert cohort_content_sha256(cohort) != cohort_content_sha256(changed_value)
+    assert cohort_content_sha256(cohort) != cohort_content_sha256(changed_identity)
+
+
+def test_string_and_integer_case_identities_do_not_collide() -> None:
+    cohort = _rows(2)
+    cohort.index = [1, "1"]
+
+    report = _audit(cohort=cohort)
+
+    assert len({metric.case_ref for metric in report.metrics}) == 2
+
+
+def test_rejects_declared_digest_that_does_not_match_evaluated_cohort() -> None:
+    with pytest.raises(FaithfulnessAuditError, match="does not match"):
+        audit_sequential_ablation(
+            AdditiveModel(),
+            _rows(),
+            model_sha256=MODEL_DIGEST,
+            cohort_sha256=COHORT_DIGEST,
+            explainer_sha256=EXPLAINER_DIGEST,
+        )
+
+
+def test_rejects_cohort_mutation_during_audit() -> None:
+    cohort = _rows()
+    mutated = False
+
+    def mutating_attribution(model, row):
+        nonlocal mutated
+        if not mutated:
+            cohort.loc["customer-0", "income"] += 1.0
+            mutated = True
+        return local_perturbation_attribution(model, row)
+
+    with pytest.raises(FaithfulnessAuditError, match="changed during the audit"):
+        _audit(cohort=cohort, attribution_fn=mutating_attribution)
 
 
 def test_rejects_reverse_ranked_attributions() -> None:

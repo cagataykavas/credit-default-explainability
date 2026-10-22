@@ -110,6 +110,11 @@ pytest -q
 
 CI trains the deterministic synthetic model, exercises the explanation and counterfactual paths, generates artifacts and builds the container.
 
+The sequential-ablation audit also recomputes a canonical digest over exact case
+identities and feature values before evaluation. A mismatched declared digest or a
+source cohort that changes during execution fails closed, preventing a faithfulness
+report from being attached to a different evaluation snapshot.
+
 ## Governance / limitations
 
 A high model score is not a legal lending decision. Permutation importance can be distorted by correlated variables; one-feature perturbations can create unrealistic combinations; and counterfactual feasibility is domain-specific. A real deployment would require fairness testing, policy controls, data lineage, monitoring, protected-class review, legal validation and human oversight.

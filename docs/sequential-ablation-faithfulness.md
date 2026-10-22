@@ -40,7 +40,10 @@ Library users can call `audit_sequential_ablation` with an already loaded model 
 a held-out `pandas.DataFrame`. The runner validates the exact feature schema, numeric
 domains, categorical bounds, unique case identities, model probabilities, complete
 attribution identities, resource budgets, and repeated prediction stability before
-issuing a report.
+issuing a report. Generate the declared cohort identity with
+`cohort_content_sha256(frame)`: the audit recomputes it from canonical case references
+and feature values, evaluates a deep snapshot, and fails closed if the caller supplies
+a different identity or the source frame changes during execution.
 
 ## Interpretation and trust boundaries
 
@@ -55,6 +58,8 @@ issuing a report.
 - The default explainer is the repository's one-feature baseline perturbation method.
   A production caller must bind the supplied model, cohort, and explainer digests to
   immutable artifacts; SHA-256 does not authenticate the producer.
+- The cohort digest proves exact snapshot identity, not confidentiality or provenance.
+  A signed manifest is still required to authenticate who produced the cohort.
 - Passing does not establish fairness, calibration, legal suitability, human
   usefulness, counterfactual feasibility, or an adverse-action reason.
 

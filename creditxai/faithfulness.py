@@ -10,7 +10,7 @@ import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from itertools import pairwise
-from numbers import Real
+from numbers import Integral, Real
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -175,11 +175,20 @@ def _digest(value: object, field: str) -> str:
 
 
 def _case_reference(value: object) -> str:
-    if isinstance(value, bool) or not isinstance(value, (str, int)):
+    if isinstance(value, bool) or not isinstance(value, (str, Integral)):
         raise FaithfulnessAuditError("cohort indices must be strings or integers")
-    encoded = str(value).encode("utf-8")
-    if not encoded or len(encoded) > MAX_IDENTIFIER_BYTES:
+    raw = str(value).encode("utf-8")
+    if not raw or len(raw) > MAX_IDENTIFIER_BYTES:
         raise FaithfulnessAuditError("cohort index exceeds the identifier budget")
+    encoded = json.dumps(
+        {
+            "type": "integer" if isinstance(value, Integral) else "string",
+            "value": int(value) if isinstance(value, Integral) else value,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -222,6 +231,38 @@ def _validate_row(values: dict[str, Any]) -> None:
         _validate_numeric(feature, values[feature])
     for feature in CATEGORICAL:
         _validate_categorical(feature, values[feature])
+
+
+def cohort_content_sha256(cohort: pd.DataFrame) -> str:
+    """Return the canonical identity of the exact indexed feature snapshot."""
+
+    if not isinstance(cohort, pd.DataFrame):
+        raise FaithfulnessAuditError("cohort must be a pandas DataFrame")
+    if tuple(cohort.columns) != tuple(FEATURES):
+        raise FaithfulnessAuditError("cohort columns must exactly match FEATURES order")
+    if not cohort.index.is_unique:
+        raise FaithfulnessAuditError("cohort indices must be unique")
+
+    records: list[dict[str, Any]] = []
+    for position in range(len(cohort)):
+        values = cohort.iloc[position].to_dict()
+        _validate_row(values)
+        normalized = {
+            feature: (
+                values[feature].item()
+                if hasattr(values[feature], "item")
+                else values[feature]
+            )
+            for feature in FEATURES
+        }
+        records.append(
+            {
+                "case_ref": _case_reference(cohort.index[position]),
+                "features": normalized,
+            }
+        )
+    records.sort(key=lambda record: record["case_ref"])
+    return _sha256_json({"features": list(FEATURES), "records": records})
 
 
 class _CountingModel:
@@ -327,6 +368,14 @@ def audit_sequential_ablation(
         raise FaithfulnessAuditError("top_k exceeds the model feature count")
     if not cohort.index.is_unique:
         raise FaithfulnessAuditError("cohort indices must be unique")
+    observed_cohort_digest = cohort_content_sha256(cohort)
+    if observed_cohort_digest != cohort_digest:
+        raise FaithfulnessAuditError(
+            "cohort_sha256 does not match the evaluated cohort snapshot"
+        )
+    audited_cohort = cohort.copy(deep=True)
+    if cohort_content_sha256(audited_cohort) != cohort_digest:
+        raise FaithfulnessAuditError("cohort changed while creating the audit snapshot")
 
     counted_model = _CountingModel(model, active_policy.max_prediction_calls)
     baseline = counted_model.baseline_row()
@@ -335,11 +384,11 @@ def audit_sequential_ablation(
     excluded = 0
     failed = 0
 
-    for position in range(len(cohort)):
-        row = cohort.iloc[[position]].copy(deep=True)
+    for position in range(len(audited_cohort)):
+        row = audited_cohort.iloc[[position]].copy(deep=True)
         values = row.iloc[0].to_dict()
         _validate_row(values)
-        case_ref = _case_reference(cohort.index[position])
+        case_ref = _case_reference(audited_cohort.index[position])
         baseline_frame = _baseline_frame(row, baseline)
         observed = counted_model.predict_probability(row)
         baseline_probability = counted_model.predict_probability(baseline_frame)
@@ -426,7 +475,10 @@ def audit_sequential_ablation(
         )
 
     eligible = len(metrics)
-    eligible_fraction = eligible / len(cohort)
+    if cohort_content_sha256(cohort) != cohort_digest:
+        raise FaithfulnessAuditError("cohort changed during the audit")
+
+    eligible_fraction = eligible / len(audited_cohort)
     failed_fraction = failed / eligible if eligible else 1.0
     release_findings: list[Finding] = []
     if eligible_fraction < active_policy.min_eligible_case_fraction:
@@ -453,7 +505,7 @@ def audit_sequential_ablation(
     metrics.sort(key=lambda item: item.case_ref)
     outcome = "accepted" if not release_findings else "rejected"
     report_document = {
-        "cases": len(cohort),
+        "cases": len(audited_cohort),
         "cohort_sha256": cohort_digest,
         "eligible_cases": eligible,
         "evidence_schema_version": 1,
@@ -475,7 +527,7 @@ def audit_sequential_ablation(
         cohort_sha256=cohort_digest,
         explainer_sha256=explainer_digest,
         policy_sha256=active_policy.digest,
-        cases=len(cohort),
+        cases=len(audited_cohort),
         eligible_cases=eligible,
         excluded_low_contrast_cases=excluded,
         failed_cases=failed,
@@ -551,7 +603,7 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                 }
             ),
-            cohort_sha256=_frame_digest(cohort),
+            cohort_sha256=cohort_content_sha256(cohort),
             explainer_sha256=_sha256_json(
                 {"method": "one-feature-baseline-perturbation", "version": 1}
             ),
