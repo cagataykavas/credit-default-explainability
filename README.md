@@ -110,6 +110,10 @@ pytest -q
 
 CI trains the deterministic synthetic model, exercises the explanation and counterfactual paths, generates artifacts and builds the container.
 
+## Attribution monitoring
+
+The repository also includes a fail-closed [attribution drift release audit](docs/attribution-drift-audit.md). It separates explanation drift from prediction drift, binds evidence to model/explainer/cohort digests, and can gate a prespecified subgroup partition with minimum-support and coverage checks. Reports hash monitor, feature, partition and subgroup identifiers rather than exposing them.
+
 ## Governance / limitations
 
 A high model score is not a legal lending decision. Permutation importance can be distorted by correlated variables; one-feature perturbations can create unrealistic combinations; and counterfactual feasibility is domain-specific. A real deployment would require fairness testing, policy controls, data lineage, monitoring, protected-class review, legal validation and human oversight.
