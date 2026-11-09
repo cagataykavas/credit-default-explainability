@@ -18,7 +18,8 @@ flowchart LR
     G --> REP[Explanation object / HTML report]
     R --> REP
     C --> REP
-    REP --> API[FastAPI]
+    REP --> A[Lineage admission]
+    A --> API[FastAPI]
 ```
 
 ## Why this project is not just a SHAP screenshot
@@ -69,10 +70,14 @@ artifacts/credit_risk.joblib
 
 ```bash
 uvicorn app.api:app --reload
-curl http://localhost:8000/demo
+curl http://localhost:8000/health
 ```
 
-`POST /score` accepts one synthetic applicant and returns:
+The service is live but deliberately not ready to score until an authenticated
+promotion artifact matches the exact fitted model and preprocessing state. See
+[`docs/scoring-admission.md`](docs/scoring-admission.md) for deployment configuration.
+
+Once configured, `POST /score` accepts one synthetic applicant and returns:
 
 ```text
 default probability
@@ -81,7 +86,12 @@ reason codes
 per-feature local probability deltas
 counterfactual candidate
 methodological caveat
+privacy-reduced admission commitments
 ```
+
+Missing, expired, tampered, or model-mismatched promotion evidence fails closed with
+HTTP `503`. `/ready` exercises the same signed admission path against a non-customer
+baseline; `/health` remains a liveness endpoint.
 
 ## Counterfactual constraints
 
@@ -114,6 +124,10 @@ The feature-lineage audit can additionally require a time-bounded HMAC-SHA256 pr
 loaded from environment-backed key material, before an explanation is admitted. See
 [`docs/explanation-schema-lineage.md`](docs/explanation-schema-lineage.md) for the key-rotation and
 trust-boundary contract.
+
+The scoring API enforces that contract at request time and fingerprints the fitted calibrated
+classifier, preprocessing contract, and explainer baselines rather than trusting a caller-supplied
+model digest.
 
 ## Governance / limitations
 

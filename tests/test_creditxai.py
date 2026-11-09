@@ -23,7 +23,11 @@ def test_model_probability_and_explanation():
 def test_counterfactual_never_changes_age_or_categories():
     frame = synthetic_credit_data(rows=2200, seed=8)
     model, _ = CreditRiskModel.fit(frame)
-    row = frame.drop(columns="default").sort_values(["utilization", "debt_ratio"], ascending=False).iloc[[0]][FEATURES]
+    row = (
+        frame.drop(columns="default")
+        .sort_values(["utilization", "debt_ratio"], ascending=False)
+        .iloc[[0]][FEATURES]
+    )
     result = find_actionable_counterfactual(model, row)
     assert "age" not in result.changed_features
     assert "employment" not in result.changed_features
@@ -31,9 +35,9 @@ def test_counterfactual_never_changes_age_or_categories():
     assert result.probability_after <= result.probability_before + 1e-12
 
 
-def test_demo_api_returns_explanation_and_counterfactual():
-    response = TestClient(app).get("/demo")
-    assert response.status_code == 200
-    payload = response.json()
-    assert "explanation" in payload
-    assert "counterfactual" in payload
+def test_unconfigured_api_is_live_but_not_ready_to_score():
+    client = TestClient(app)
+
+    assert client.get("/health").status_code == 200
+    assert client.get("/ready").status_code == 503
+    assert client.get("/demo").status_code == 503

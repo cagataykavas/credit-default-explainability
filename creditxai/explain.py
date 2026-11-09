@@ -57,7 +57,9 @@ def local_perturbation_attribution(
                 direction="increases_risk" if delta > 0 else "decreases_risk",
             )
         )
-    return sorted(contributions, key=lambda item: abs(item.probability_delta), reverse=True)
+    return sorted(
+        contributions, key=lambda item: abs(item.probability_delta), reverse=True
+    )
 
 
 def reason_codes(contributions: list[FeatureContribution], top_k: int = 4) -> list[str]:
@@ -76,17 +78,25 @@ def reason_codes(contributions: list[FeatureContribution], top_k: int = 4) -> li
 
 
 def explain_decision(
-    model: CreditRiskModel, row: pd.DataFrame, threshold: float = 0.35
+    model: CreditRiskModel,
+    row: pd.DataFrame,
+    threshold: float = 0.35,
+    *,
+    contributions: list[FeatureContribution] | None = None,
 ) -> dict[str, Any]:
     probability = model.predict_probability(row)
-    contributions = local_perturbation_attribution(model, row)
+    effective_contributions = (
+        contributions
+        if contributions is not None
+        else local_perturbation_attribution(model, row)
+    )
     return {
         "default_probability": probability,
         "threshold": threshold,
         "decision": "manual_review" if probability >= threshold else "lower_risk_path",
-        "reason_codes": reason_codes(contributions),
+        "reason_codes": reason_codes(effective_contributions),
         "local_attribution_method": "one_feature_baseline_perturbation",
-        "contributions": [item.as_dict() for item in contributions],
+        "contributions": [item.as_dict() for item in effective_contributions],
         "caveat": (
             "Perturbation deltas describe model sensitivity around this row; they are not causal explanations "
             "and should not be interpreted as legal adverse-action reasons without domain/legal validation."
