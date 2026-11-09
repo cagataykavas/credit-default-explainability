@@ -434,6 +434,71 @@ def build_credit_feature_contract(
     )
 
 
+def fingerprint_credit_model(model: CreditRiskModel) -> str:
+    """Fingerprint fitted scoring and explanation state without serializing samples.
+
+    Joblib bytes are useful for artifact transport but are not a stable semantic
+    identity across Python and dependency builds. This digest instead commits to
+    the fitted preprocessing contract, calibrated classifier parameters, and the
+    baselines used by the local explainer.
+    """
+    contract = build_credit_feature_contract(model, model_digest="0" * 64)
+    classifier = model.pipeline.named_steps.get("classifier")
+    calibrated = getattr(classifier, "calibrated_classifiers_", None)
+    if not calibrated:
+        raise ExplanationContractError("credit classifier must be fitted")
+
+    fitted_estimators: list[dict[str, Any]] = []
+    for index, fitted in enumerate(calibrated):
+        estimator = getattr(fitted, "estimator", None)
+        calibrators = getattr(fitted, "calibrators", None)
+        if estimator is None or not calibrators:
+            raise ExplanationContractError(
+                f"calibrated classifier {index} has incomplete fitted state"
+            )
+        fitted_calibrators: list[dict[str, Any]] = []
+        for calibrator_index, calibrator in enumerate(calibrators):
+            if not hasattr(calibrator, "a_") or not hasattr(calibrator, "b_"):
+                raise ExplanationContractError(
+                    "credit classifier must use fitted sigmoid calibration; "
+                    f"calibrator {calibrator_index} is unsupported"
+                )
+            fitted_calibrators.append(
+                {
+                    "kind": "sigmoid",
+                    "a": calibrator.a_,
+                    "b": calibrator.b_,
+                }
+            )
+        fitted_estimators.append(
+            {
+                "kind": type(estimator).__name__,
+                "classes": estimator.classes_,
+                "n_features_in": estimator.n_features_in_,
+                "iterations": estimator.n_iter_,
+                "coefficients": estimator.coef_,
+                "intercepts": estimator.intercept_,
+                "calibrators": fitted_calibrators,
+            }
+        )
+
+    payload = {
+        "schema_version": "1.0",
+        "raw_feature_order": FEATURES,
+        "pipeline_digest": contract.pipeline_digest,
+        "classifier": {
+            "kind": type(classifier).__name__,
+            "method": classifier.method,
+            "classes": classifier.classes_,
+            "n_features_in": classifier.n_features_in_,
+            "ensemble": classifier.ensemble,
+            "fitted_estimators": fitted_estimators,
+        },
+        "explanation_baseline": model.baseline_row(),
+    }
+    return _digest(_python_value(payload))
+
+
 def sign_promotion_receipt(
     contract: ModelFeatureContract,
     *,
