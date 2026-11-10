@@ -14,7 +14,7 @@ jobs:
       - run: pip install -r requirements.txt
       - run: ruff check .
       - run: python -m pytest -q
-      - run: python -m creditxai.cli --rows 2200
+      - run: python -m creditxai.cli --rows 2200 --fail-on-monotonicity-violation
   container:
     runs-on: ubuntu-latest
     steps:

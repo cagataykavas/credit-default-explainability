@@ -9,6 +9,7 @@ def render_report(result: dict[str, Any], output: str | Path) -> Path:
     metrics = result["metrics"]
     explanation = result["explanation"]
     cf = result["counterfactual"]
+    monotonicity = result["monotonicity_audit"]
     importance_rows = "".join(
         f"<tr><td>{html.escape(str(item['feature']))}</td><td>{float(item['importance_mean']):.4f}</td><td>{float(item['importance_std']):.4f}</td></tr>"
         for item in result["global_importance"]
@@ -16,6 +17,12 @@ def render_report(result: dict[str, Any], output: str | Path) -> Path:
     local_rows = "".join(
         f"<tr><td>{html.escape(str(item['feature']))}</td><td>{html.escape(str(item['observed']))}</td><td>{float(item['probability_delta']):+.4f}</td><td>{html.escape(str(item['direction']))}</td></tr>"
         for item in explanation["contributions"]
+    )
+    monotonicity_rows = "".join(
+        f"<tr><td>{html.escape(str(item['feature']))}</td><td>{html.escape(str(item['expected_direction']))}</td>"
+        f"<td>{int(item['comparisons'])}</td><td>{int(item['violations'])}</td>"
+        f"<td>{float(item['worst_violation']):.6f}</td><td>{'pass' if item['passed'] else 'fail'}</td></tr>"
+        for item in monotonicity["features"]
     )
     changes = "<br>".join(f"{html.escape(k)} → {html.escape(str(v))}" for k, v in cf["changed_features"].items()) or "No change needed"
     doc = f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -28,6 +35,8 @@ table{{width:100%;border-collapse:collapse;background:#121b30;margin-bottom:28px
 <h2>Decision explanation</h2><p><strong>{html.escape(str(explanation['decision']))}</strong> · reasons: {html.escape(', '.join(explanation['reason_codes']))}</p>
 <table><thead><tr><th>Feature</th><th>Observed</th><th>Probability delta</th><th>Direction</th></tr></thead><tbody>{local_rows}</tbody></table>
 <h2>Global permutation importance</h2><table><thead><tr><th>Feature</th><th>Mean importance</th><th>Std</th></tr></thead><tbody>{importance_rows}</tbody></table>
+<h2>Governed monotonic-response audit</h2><p><strong>{'PASS' if monotonicity['passed'] else 'FAIL'}</strong> across {int(monotonicity['contexts_evaluated'])} held-out contexts.</p>
+<table><thead><tr><th>Feature</th><th>Expected direction</th><th>Comparisons</th><th>Violations</th><th>Worst violation</th><th>Status</th></tr></thead><tbody>{monotonicity_rows}</tbody></table>
 <h2>Illustrative actionable counterfactual</h2><p>{changes}</p><p class="muted">{html.escape(str(explanation['caveat']))}</p>
 </main></body></html>"""
     path = Path(output)
