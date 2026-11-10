@@ -9,6 +9,7 @@ from .data import FEATURES, synthetic_credit_data
 from .explain import explain_decision
 from .global_importance import permutation_feature_importance
 from .model import CreditRiskModel
+from .monotonicity import audit_monotonic_responses
 from .report import render_report
 
 
@@ -17,6 +18,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rows", type=int, default=6000)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", type=Path, default=Path("artifacts"))
+    parser.add_argument(
+        "--fail-on-monotonicity-violation",
+        action="store_true",
+        help="return a non-zero exit status when the governed monotonicity audit fails",
+    )
     args = parser.parse_args(argv)
 
     frame = synthetic_credit_data(args.rows, args.seed)
@@ -26,9 +32,11 @@ def main(argv: list[str] | None = None) -> int:
     example = test.sort_values("debt_ratio", ascending=False).drop(columns="default").iloc[[0]][FEATURES]
     explanation = explain_decision(model, example)
     counterfactual = find_actionable_counterfactual(model, example).as_dict()
+    monotonicity_audit = audit_monotonic_responses(model, test[FEATURES])
     result = {
         "metrics": metrics,
         "global_importance": importance,
+        "monotonicity_audit": monotonicity_audit,
         "example": {key: (value.item() if hasattr(value, "item") else value) for key, value in example.iloc[0].to_dict().items()},
         "explanation": explanation,
         "counterfactual": counterfactual,
@@ -37,7 +45,18 @@ def main(argv: list[str] | None = None) -> int:
     (args.output / "analysis.json").write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
     render_report(result, args.output / "report.html")
     model.save(str(args.output / "credit_risk.joblib"))
-    print(json.dumps({"metrics": metrics, "output": str(args.output)}, indent=2))
+    print(
+        json.dumps(
+            {
+                "metrics": metrics,
+                "monotonicity_audit_passed": monotonicity_audit["passed"],
+                "output": str(args.output),
+            },
+            indent=2,
+        )
+    )
+    if args.fail_on_monotonicity_violation and not monotonicity_audit["passed"]:
+        return 2
     return 0
 
 
