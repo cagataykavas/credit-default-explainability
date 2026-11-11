@@ -7,7 +7,8 @@ import numpy as np
 import pandas as pd
 
 from .data import FEATURES
-from .model import CreditRiskModel
+from .model import NUMERIC, CreditRiskModel
+from .reason_policy import governed_reason_codes
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,8 @@ def local_perturbation_attribution(
     contributions: list[FeatureContribution] = []
     for feature in FEATURES:
         perturbed = row.copy()
+        if feature in NUMERIC:
+            perturbed[feature] = perturbed[feature].astype(float)
         perturbed.loc[perturbed.index[0], feature] = baseline[feature]
         probability_without_feature_value = model.predict_probability(perturbed)
         delta = original_probability - probability_without_feature_value
@@ -57,32 +60,30 @@ def local_perturbation_attribution(
 
 
 def reason_codes(contributions: list[FeatureContribution], top_k: int = 4) -> list[str]:
-    labels = {
-        "income": "income level",
-        "debt_ratio": "debt-to-income burden",
-        "late_payments": "late-payment history",
-        "utilization": "credit utilization",
-        "account_age_months": "account history length",
-        "age": "age feature in the synthetic model",
-        "employment": "employment category",
-        "housing": "housing category",
-    }
-    positive = [item for item in contributions if item.probability_delta > 0]
-    return [labels.get(item.feature, item.feature) for item in positive[:top_k]]
+    """Return governed labels for backward-compatible library callers."""
+    selected = governed_reason_codes(contributions, top_k=top_k, materiality=0.0)
+    return list(selected.reason_codes)
 
 
 def explain_decision(model: CreditRiskModel, row: pd.DataFrame, threshold: float = 0.35) -> dict[str, Any]:
     probability = model.predict_probability(row)
     contributions = local_perturbation_attribution(model, row)
+    decision = "manual_review" if probability >= threshold else "lower_risk_path"
+    governed_reasons = governed_reason_codes(
+        contributions,
+        require_reason=decision == "manual_review",
+    )
     return {
         "default_probability": probability,
         "threshold": threshold,
-        "decision": "manual_review" if probability >= threshold else "lower_risk_path",
-        "reason_codes": reason_codes(contributions),
+        "decision": decision,
+        "reason_codes": list(governed_reasons.reason_codes),
+        "reason_code_features": list(governed_reasons.source_features),
+        "reason_code_policy": governed_reasons.policy_evidence(),
         "local_attribution_method": "one_feature_baseline_perturbation",
         "contributions": [item.as_dict() for item in contributions],
         "caveat": (
             "Perturbation deltas describe model sensitivity around this row; they are not causal explanations "
-            "and should not be interpreted as legal adverse-action reasons without domain/legal validation."
+            "and the governed labels are not legal adverse-action reasons without domain/legal validation."
         ),
     }

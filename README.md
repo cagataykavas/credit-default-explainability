@@ -13,7 +13,8 @@ flowchart LR
     CAL --> S[Risk probability]
     M --> G[Permutation importance]
     S --> L[Local baseline perturbations]
-    L --> R[Reason codes]
+    L --> P[Governed reason policy]
+    P --> R[Reason codes / review finding]
     S --> C[Constrained counterfactual search]
     G --> REP[Explanation object / HTML report]
     R --> REP
@@ -32,6 +33,20 @@ The repository separates several questions that are often incorrectly collapsed 
 - **What should a reviewer see?** The API returns structured reason codes, local sensitivities, probability, threshold and explicit caveats.
 
 The local perturbation values are deliberately labelled as *model sensitivity*, not causal explanations or Shapley values.
+
+## Governed reason-code boundary
+
+The scoring response keeps the complete eight-feature attribution vector for reviewer transparency,
+but it does not silently convert every positive contribution into a user-facing reason. A versioned
+policy permits only `income`, `debt_ratio`, `late_payments`, `utilization`, and
+`account_age_months` as reason-code sources. `age`, `employment`, and `housing` remain visible in
+the attribution evidence but are excluded from the reason list.
+
+If an excluded feature materially increases the score, or a manual-review result has no material
+eligible reason, the response sets `requires_policy_review` and emits a stable finding. The policy
+also fails closed on missing, duplicate, unknown, non-finite, or directionally inconsistent
+attributions. This is a demonstrative governance policy, not a claim that the eligible labels meet
+jurisdiction-specific adverse-action, fairness, or consumer-notice requirements.
 
 ## Synthetic features
 
