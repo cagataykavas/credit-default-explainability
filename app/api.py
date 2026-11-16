@@ -3,13 +3,13 @@ from __future__ import annotations
 from functools import lru_cache
 
 import pandas as pd
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from creditxai.counterfactual import find_actionable_counterfactual
 from creditxai.data import FEATURES, synthetic_credit_data
 from creditxai.explain import explain_decision
-from creditxai.model import CreditRiskModel
+from creditxai.model import CreditRiskModel, InputDomainError
 
 app = FastAPI(title="Credit Default Explainability", version="1.0.0")
 
@@ -44,10 +44,13 @@ def health() -> dict[str, str]:
 def score(payload: Applicant) -> dict[str, object]:
     row = to_frame(payload)
     model = demo_model()
-    return {
-        "explanation": explain_decision(model, row),
-        "counterfactual": find_actionable_counterfactual(model, row).as_dict(),
-    }
+    try:
+        return {
+            "explanation": explain_decision(model, row),
+            "counterfactual": find_actionable_counterfactual(model, row).as_dict(),
+        }
+    except InputDomainError as error:
+        raise HTTPException(status_code=422, detail=error.as_dict()) from error
 
 
 @app.get("/demo")

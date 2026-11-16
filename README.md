@@ -28,6 +28,7 @@ The repository separates several questions that are often incorrectly collapsed 
 - **Is the probability calibrated?** The classifier is wrapped with sigmoid calibration and reports Brier score as well as ROC-AUC / average precision.
 - **Which features matter globally?** Held-out permutation importance measures the drop in ROC-AUC when one raw feature is shuffled.
 - **Why did this row receive this score?** A model-agnostic local perturbation replaces each feature with a training baseline and measures the probability change.
+- **Is the input supported by the fitted model?** Scoring fails closed when a categorical value was not represented in training, rather than producing an explanation for an all-zero unknown-category encoding.
 - **What small actionable changes move the model score?** A constrained greedy counterfactual search considers only a small allowlist of synthetic, potentially actionable variables.
 - **What should a reviewer see?** The API returns structured reason codes, local sensitivities, probability, threshold and explicit caveats.
 
@@ -82,6 +83,13 @@ per-feature local probability deltas
 counterfactual candidate
 methodological caveat
 ```
+
+Categorical values are admitted against vocabulary metadata stored with the fitted model.
+Unknown `employment` or `housing` values return HTTP `422` with a machine-readable list of
+the rejected feature, observed value and allowed training values. Missing categorical values
+remain compatible with the fitted imputer. This gate prevents unsupported categories from
+receiving confident-looking scores or reason codes; it does not detect semantic drift within
+an allowed category.
 
 ## Counterfactual constraints
 
