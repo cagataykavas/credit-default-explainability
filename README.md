@@ -29,9 +29,12 @@ The repository separates several questions that are often incorrectly collapsed 
 - **Which features matter globally?** Held-out permutation importance measures the drop in ROC-AUC when one raw feature is shuffled.
 - **Why did this row receive this score?** A model-agnostic local perturbation replaces each feature with a training baseline and measures the probability change.
 - **What small actionable changes move the model score?** A constrained greedy counterfactual search considers only a small allowlist of synthetic, potentially actionable variables.
+- **Does an explanation survive upstream missingness?** A bounded audit masks each governed feature, then gates probability drift, top-k attribution overlap and direction agreement without publishing raw row values.
 - **What should a reviewer see?** The API returns structured reason codes, local sensitivities, probability, threshold and explicit caveats.
 
 The local perturbation values are deliberately labelled as *model sensitivity*, not causal explanations or Shapley values.
+
+See [the missingness robustness audit](docs/missingness-robustness.md) for a deterministic release-gate utility and its interpretation limits.
 
 ## Synthetic features
 

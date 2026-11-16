@@ -41,7 +41,9 @@ def local_perturbation_attribution(
     contributions: list[FeatureContribution] = []
     for feature in FEATURES:
         perturbed = row.copy()
-        perturbed.loc[perturbed.index[0], feature] = baseline[feature]
+        # Replace the complete one-row column so pandas can widen integer dtypes when
+        # a training median is fractional (for example, 146 -> 146.5).
+        perturbed[feature] = baseline[feature]
         probability_without_feature_value = model.predict_probability(perturbed)
         delta = original_probability - probability_without_feature_value
         contributions.append(
