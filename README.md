@@ -1,6 +1,6 @@
 # Credit Default Explainability
 
-A runnable explainable-credit-risk reference project combining **calibrated default probabilities, global permutation importance, local perturbation attribution, reason codes and constrained counterfactual search**.
+A runnable explainable-credit-risk reference project combining **calibrated default probabilities, global permutation importance, local perturbation attribution, pairwise interaction audits, reason codes and constrained counterfactual search**.
 
 Everything runs on deterministic synthetic data. The project demonstrates model governance and explainability engineering; it is not a lending policy, legal adverse-action system or financial recommendation.
 
@@ -13,10 +13,12 @@ flowchart LR
     CAL --> S[Risk probability]
     M --> G[Permutation importance]
     S --> L[Local baseline perturbations]
+    S --> I[Pairwise interaction audit]
     L --> R[Reason codes]
     S --> C[Constrained counterfactual search]
     G --> REP[Explanation object / HTML report]
     R --> REP
+    I --> REP
     C --> REP
     REP --> API[FastAPI]
 ```
@@ -28,6 +30,7 @@ The repository separates several questions that are often incorrectly collapsed 
 - **Is the probability calibrated?** The classifier is wrapped with sigmoid calibration and reports Brier score as well as ROC-AUC / average precision.
 - **Which features matter globally?** Held-out permutation importance measures the drop in ROC-AUC when one raw feature is shuffled.
 - **Why did this row receive this score?** A model-agnostic local perturbation replaces each feature with a training baseline and measures the probability change.
+- **Does one-feature attribution hide pair behavior?** A bounded second-order audit measures every pair's probability residual against the fitted training baseline.
 - **What small actionable changes move the model score?** A constrained greedy counterfactual search considers only a small allowlist of synthetic, potentially actionable variables.
 - **What should a reviewer see?** The API returns structured reason codes, local sensitivities, probability, threshold and explicit caveats.
 
@@ -56,6 +59,28 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python -m creditxai.cli --rows 6000 --seed 42
 ```
+
+Use the pairwise diagnostic as an optional release gate:
+
+```bash
+python -m creditxai.cli \
+  --rows 6000 \
+  --max-pair-interaction 0.05 \
+  --fail-on-pair-interaction
+```
+
+For features `i` and `j`, the audit computes
+`f(x) - f(x_i=base_i) - f(x_j=base_j) + f(x_i=base_i,x_j=base_j)` on the
+probability scale. It checks the complete feature-pair set, enforces a prediction-call budget
+before execution, rejects invalid probabilities and schemas, and emits deterministic evidence
+that binds the reviewed policy plus hashes of the exact input and fitted baseline. Exit code `2` means a pair exceeded the
+reviewed threshold when the optional gate is enabled.
+
+The result is a local sensitivity diagnostic. It is not a causal interaction, a SHAP interaction
+value, or proof that changing both features is feasible. Probability calibration itself can create
+non-additivity even when the underlying log-odds model is linear. Thresholds therefore require
+predeployment calibration on representative held-out cases. Input hashes bind evidence but do not
+anonymize low-entropy feature values or authenticate the producer.
 
 Artifacts:
 
