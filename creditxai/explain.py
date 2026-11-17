@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 from .data import FEATURES
+from .input_domain import audit_numeric_input_domain
 from .model import CreditRiskModel
 
 
@@ -72,6 +73,7 @@ def reason_codes(contributions: list[FeatureContribution], top_k: int = 4) -> li
 
 
 def explain_decision(model: CreditRiskModel, row: pd.DataFrame, threshold: float = 0.35) -> dict[str, Any]:
+    input_domain = audit_numeric_input_domain(row, model.numeric_domain_profiles)
     probability = model.predict_probability(row)
     contributions = local_perturbation_attribution(model, row)
     return {
@@ -80,6 +82,7 @@ def explain_decision(model: CreditRiskModel, row: pd.DataFrame, threshold: float
         "decision": "manual_review" if probability >= threshold else "lower_risk_path",
         "reason_codes": reason_codes(contributions),
         "local_attribution_method": "one_feature_baseline_perturbation",
+        "input_domain": input_domain.as_dict(),
         "contributions": [item.as_dict() for item in contributions],
         "caveat": (
             "Perturbation deltas describe model sensitivity around this row; they are not causal explanations "
