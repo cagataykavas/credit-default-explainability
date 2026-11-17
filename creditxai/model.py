@@ -14,6 +14,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from .data import FEATURES, TARGET
+from .input_domain import NumericDomainProfile, fit_numeric_domain_profiles
 
 NUMERIC = ["income", "debt_ratio", "late_payments", "utilization", "account_age_months", "age"]
 CATEGORICAL = ["employment", "housing"]
@@ -45,6 +46,7 @@ class CreditRiskModel:
     pipeline: Pipeline
     training_medians: dict[str, float]
     category_modes: dict[str, str]
+    numeric_domain_profiles: dict[str, NumericDomainProfile]
 
     @classmethod
     def fit(cls, frame: pd.DataFrame) -> tuple[CreditRiskModel, dict[str, float]]:
@@ -62,7 +64,8 @@ class CreditRiskModel:
         }
         medians = {name: float(train[name].median()) for name in NUMERIC}
         modes = {name: str(train[name].mode(dropna=True).iloc[0]) for name in CATEGORICAL}
-        return cls(pipeline, medians, modes), metrics
+        numeric_domains = fit_numeric_domain_profiles(train, NUMERIC)
+        return cls(pipeline, medians, modes, numeric_domains), metrics
 
     def predict_probability(self, row: pd.DataFrame) -> float:
         return float(self.pipeline.predict_proba(row[FEATURES])[:, 1][0])

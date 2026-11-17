@@ -83,6 +83,21 @@ counterfactual candidate
 methodological caveat
 ```
 
+### Numeric input-domain evidence
+
+The fitted model retains observed minimum/maximum values and robust 1st/99th-percentile bounds
+from the exact training split for every numeric feature. Before a local explanation is emitted, the
+scoring row is audited against those profiles:
+
+- non-finite numeric values fail closed;
+- values outside the observed training range receive an extrapolation warning;
+- values inside the observed range but outside the reviewed quantiles receive a softer warning;
+- missing values are recorded as not domain-checked rather than silently counted as in-range.
+
+The structured warning names the feature and finding code without echoing the applicant value.
+Warnings request review; they do not prove a prediction is wrong or replace drift, fairness,
+calibration, missingness-robustness or policy validation.
+
 ## Counterfactual constraints
 
 The demo counterfactual search does **not** modify age, employment or housing. It only explores the allowlisted synthetic fields:
