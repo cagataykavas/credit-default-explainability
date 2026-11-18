@@ -1,6 +1,6 @@
 # Credit Default Explainability
 
-A runnable explainable-credit-risk reference project combining **calibrated default probabilities, global permutation importance, local perturbation attribution, reason codes and constrained counterfactual search**.
+A runnable explainable-credit-risk reference project combining **calibrated default probabilities, global and grouped permutation importance, local perturbation attribution, reason codes and constrained counterfactual search**.
 
 Everything runs on deterministic synthetic data. The project demonstrates model governance and explainability engineering; it is not a lending policy, legal adverse-action system or financial recommendation.
 
@@ -12,10 +12,12 @@ flowchart LR
     M --> CAL[Probability calibration]
     CAL --> S[Risk probability]
     M --> G[Permutation importance]
+    M --> GG[Governed grouped permutation audit]
     S --> L[Local baseline perturbations]
     L --> R[Reason codes]
     S --> C[Constrained counterfactual search]
     G --> REP[Explanation object / HTML report]
+    GG --> REP
     R --> REP
     C --> REP
     REP --> API[FastAPI]
@@ -27,11 +29,28 @@ The repository separates several questions that are often incorrectly collapsed 
 
 - **Is the probability calibrated?** The classifier is wrapped with sigmoid calibration and reports Brier score as well as ROC-AUC / average precision.
 - **Which features matter globally?** Held-out permutation importance measures the drop in ROC-AUC when one raw feature is shuffled.
+- **Are correlated feature families hiding model reliance?** Governed groups are jointly permuted with one row order, preserving within-group relationships while measuring their combined ROC-AUC drop.
 - **Why did this row receive this score?** A model-agnostic local perturbation replaces each feature with a training baseline and measures the probability change.
 - **What small actionable changes move the model score?** A constrained greedy counterfactual search considers only a small allowlist of synthetic, potentially actionable variables.
 - **What should a reviewer see?** The API returns structured reason codes, local sensitivities, probability, threshold and explicit caveats.
 
 The local perturbation values are deliberately labelled as *model sensitivity*, not causal explanations or Shapley values.
+
+## Grouped permutation audit
+
+Independent permutation importance can split or mask reliance when several inputs
+carry related signal. The CLI therefore also evaluates three explicit, exhaustive
+raw-feature groups: affordability, credit history and applicant context.
+
+Each repeat jointly moves every column in a group using the same row permutation.
+The JSON evidence retains the baseline score, exact group definition hash, seed,
+repeat count, every per-repeat ROC-AUC drop, mean and sample standard deviation.
+Group definitions fail closed if they omit a model feature, overlap, contain an
+unknown feature or use an empty name. Negative importance is retained rather than
+clipped because it can reveal sampling noise or harmful reliance.
+
+This audit measures predictive reliance under the observed synthetic distribution.
+It does not establish causality, fairness or the acceptability of using a feature.
 
 ## Synthetic features
 
@@ -108,7 +127,9 @@ ruff check .
 pytest -q
 ```
 
-CI trains the deterministic synthetic model, exercises the explanation and counterfactual paths, generates artifacts and builds the container.
+CI trains the deterministic synthetic model, exercises independent and grouped
+importance, explanation and counterfactual paths, generates artifacts and builds
+the container.
 
 ## Governance / limitations
 
@@ -116,4 +137,4 @@ A high model score is not a legal lending decision. Permutation importance can b
 
 ## Portfolio signal
 
-**Python · scikit-learn · probability calibration · XAI · permutation importance · counterfactual explanations · model governance · FastAPI · Docker · CI/CD**
+**Python · scikit-learn · probability calibration · XAI · grouped permutation importance · counterfactual explanations · model governance · FastAPI · Docker · CI/CD**
