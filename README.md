@@ -27,7 +27,7 @@ The repository separates several questions that are often incorrectly collapsed 
 
 - **Is the probability calibrated?** The classifier is wrapped with sigmoid calibration and reports Brier score as well as ROC-AUC / average precision.
 - **Which features matter globally?** Held-out permutation importance measures the drop in ROC-AUC when one raw feature is shuffled.
-- **Why did this row receive this score?** A model-agnostic local perturbation replaces each feature with a training baseline and measures the probability change.
+- **Why did this row receive this score?** A model-agnostic local perturbation replaces each feature with a training baseline and measures the probability change. Deltas within a reported, configurable numerical tolerance are neutral rather than assigned a spurious risk direction or reason code.
 - **What small actionable changes move the model score?** A constrained greedy counterfactual search considers only a small allowlist of synthetic, potentially actionable variables.
 - **What should a reviewer see?** The API returns structured reason codes, local sensitivities, probability, threshold and explicit caveats.
 
