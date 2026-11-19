@@ -17,6 +17,11 @@ def render_report(result: dict[str, Any], output: str | Path) -> Path:
         f"<tr><td>{html.escape(str(item['feature']))}</td><td>{html.escape(str(item['observed']))}</td><td>{float(item['probability_delta']):+.4f}</td><td>{html.escape(str(item['direction']))}</td></tr>"
         for item in explanation["contributions"]
     )
+    tolerance = result["tolerance_sensitivity"]
+    tolerance_rows = "".join(
+        f"<tr><td>{float(item['tolerance']):.1e}</td><td>{len(item['neutral_features'])}</td><td>{html.escape(', '.join(item['reason_code_ranking']) or 'none')}</td></tr>"
+        for item in tolerance["snapshots"]
+    )
     changes = "<br>".join(f"{html.escape(k)} → {html.escape(str(v))}" for k, v in cf["changed_features"].items()) or "No change needed"
     doc = f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Credit XAI Report</title><style>
@@ -27,6 +32,8 @@ table{{width:100%;border-collapse:collapse;background:#121b30;margin-bottom:28px
 <div class="cards"><div class="card"><div class="big">{metrics['roc_auc']:.3f}</div><div>ROC-AUC</div></div><div class="card"><div class="big">{metrics['brier_score']:.3f}</div><div>Brier score</div></div><div class="card"><div class="big">{explanation['default_probability']:.1%}</div><div>Example probability</div></div><div class="card"><div class="big">{cf['probability_after']:.1%}</div><div>Counterfactual probability</div></div></div>
 <h2>Decision explanation</h2><p><strong>{html.escape(str(explanation['decision']))}</strong> · reasons: {html.escape(', '.join(explanation['reason_codes']))}</p>
 <table><thead><tr><th>Feature</th><th>Observed</th><th>Probability delta</th><th>Direction</th></tr></thead><tbody>{local_rows}</tbody></table>
+<h2>Direction-tolerance sensitivity</h2><p>Risk-feature ranking stable: <strong>{str(tolerance['risk_ranking_stable']).lower()}</strong> · reason-code ranking stable: <strong>{str(tolerance['reason_codes_stable']).lower()}</strong> · unstable features: {html.escape(', '.join(tolerance['unstable_features']) or 'none')}</p>
+<table><thead><tr><th>Tolerance</th><th>Neutral features</th><th>Reason-code ranking</th></tr></thead><tbody>{tolerance_rows}</tbody></table>
 <h2>Global permutation importance</h2><table><thead><tr><th>Feature</th><th>Mean importance</th><th>Std</th></tr></thead><tbody>{importance_rows}</tbody></table>
 <h2>Illustrative actionable counterfactual</h2><p>{changes}</p><p class="muted">{html.escape(str(explanation['caveat']))}</p>
 </main></body></html>"""

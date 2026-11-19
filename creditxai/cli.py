@@ -6,10 +6,11 @@ from pathlib import Path
 
 from .counterfactual import find_actionable_counterfactual
 from .data import FEATURES, synthetic_credit_data
-from .explain import explain_decision
+from .explain import FeatureContribution, explain_decision
 from .global_importance import permutation_feature_importance
 from .model import CreditRiskModel
 from .report import render_report
+from .tolerance_audit import DEFAULT_TOLERANCES, audit_direction_tolerances
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -17,6 +18,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rows", type=int, default=6000)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", type=Path, default=Path("artifacts"))
+    parser.add_argument(
+        "--direction-tolerance",
+        action="append",
+        type=float,
+        default=None,
+        help="strictly increasing local-attribution tolerance; repeat to override audit defaults",
+    )
     args = parser.parse_args(argv)
 
     frame = synthetic_credit_data(args.rows, args.seed)
@@ -25,12 +33,17 @@ def main(argv: list[str] | None = None) -> int:
     importance = permutation_feature_importance(model, test, repeats=5, seed=args.seed)
     example = test.sort_values("debt_ratio", ascending=False).drop(columns="default").iloc[[0]][FEATURES]
     explanation = explain_decision(model, example)
+    tolerance_sensitivity = audit_direction_tolerances(
+        [FeatureContribution(**item) for item in explanation["contributions"]],
+        tolerances=tuple(args.direction_tolerance or DEFAULT_TOLERANCES),
+    ).as_dict()
     counterfactual = find_actionable_counterfactual(model, example).as_dict()
     result = {
         "metrics": metrics,
         "global_importance": importance,
         "example": {key: (value.item() if hasattr(value, "item") else value) for key, value in example.iloc[0].to_dict().items()},
         "explanation": explanation,
+        "tolerance_sensitivity": tolerance_sensitivity,
         "counterfactual": counterfactual,
     }
     args.output.mkdir(parents=True, exist_ok=True)

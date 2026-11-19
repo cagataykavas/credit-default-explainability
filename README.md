@@ -33,6 +33,21 @@ The repository separates several questions that are often incorrectly collapsed 
 
 The local perturbation values are deliberately labelled as *model sensitivity*, not causal explanations or Shapley values.
 
+## Attribution tolerance sensitivity
+
+`creditxai.tolerance_audit` holds one local attribution vector fixed and reclassifies it across the reviewed tolerances `0`, `1e-8`, `1e-6`, and `1e-4`. The audit reports the risk-feature and human-readable reason-code rankings at every value, identifies features whose direction changes, and records whether the rankings remain stable.
+
+The JSON artifact includes SHA-256 identities for the exact floating-point deltas and the complete tolerance audit. Raw applicant values are excluded from those identities. Override the default policy by repeating a strictly increasing CLI option:
+
+```bash
+python -m creditxai.cli \
+  --direction-tolerance 0 \
+  --direction-tolerance 1e-7 \
+  --direction-tolerance 1e-5
+```
+
+This is a numerical-policy sensitivity check, not statistical calibration. A stable ranking does not make a perturbation causal, realistic, fair, or legally suitable as an adverse-action reason.
+
 ## Synthetic features
 
 ```text
@@ -108,7 +123,7 @@ ruff check .
 pytest -q
 ```
 
-CI trains the deterministic synthetic model, exercises the explanation and counterfactual paths, generates artifacts and builds the container.
+CI trains the deterministic synthetic model, exercises the explanation, tolerance-sensitivity and counterfactual paths, generates artifacts and builds the container.
 
 ## Governance / limitations
 
